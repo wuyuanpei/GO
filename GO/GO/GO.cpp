@@ -21,11 +21,14 @@ int hand_record; // record the hand of last eaten piece (for handling jie)
 void init();
 void end();
 void print_board();
+void display();
 int prompt();
 void switch_player();
 int calculate_qi(int index);
 int validate_move(int index);
 void add_record(int index);
+void write_game();
+void read_game();
 
 // main function
 int main(int argc, char* argv[]) {
@@ -43,28 +46,45 @@ int main(int argc, char* argv[]) {
 			end();
 			exit(-1);
 		}
+		if (index == -3) {
+			write_game();
+			continue;
+		}
+		if (index == -4) {
+			read_game();
+			continue;
+		}
 		if (validate_move(index) == -1)
 			continue;
-		print_board();
-		printf("HAND: %d\n", hand);
-		printf("QI of the current piece: %d \n", calculate_qi(index));
-		printf("BLACK record: ");
-		for (int i = 0; i < player_B_list_size; i++)
-			printf("%d%c ", player_B_list[i] / bsize + 1, player_B_list[i] % bsize + 65);
-		printf("\nWHITE record: ");
-		for (int i = 0; i < player_W_list_size; i++)
-			printf("%d%c ", player_W_list[i] / bsize + 1, player_W_list[i] % bsize + 65);
-		printf("\n\n");
+		display();
 	}
+}
+
+// Display each step
+void display() {
+	print_board();
+	printf("HAND: %d\n", hand);
+	printf("BLACK record: ");
+	for (int i = 0; i < player_B_list_size; i++)
+		printf("%d%c ", player_B_list[i] / bsize + 1, player_B_list[i] % bsize + 65);
+	printf("\nWHITE record: ");
+	for (int i = 0; i < player_W_list_size; i++)
+		printf("%d%c ", player_W_list[i] / bsize + 1, player_W_list[i] % bsize + 65);
+	printf("\n\n");
 }
 
 // Init and end
 void init() {
 	board = (char*)calloc(bsize * bsize, sizeof(char));
-	piece_index_buf = (int*)calloc(bsize * bsize / 2, sizeof(int));
-	qi_index_buf = (int*)calloc(bsize * bsize / 2, sizeof(int));
+	piece_index_buf = (int*)calloc(bsize * bsize, sizeof(int));
+	qi_index_buf = (int*)calloc(bsize * bsize, sizeof(int));
 	player_B_list = (int*)calloc(bsize * bsize, sizeof(int));
 	player_W_list = (int*)calloc(bsize * bsize, sizeof(int));
+	if (board == NULL || piece_index_buf == NULL || qi_index_buf == NULL ||
+		player_B_list == NULL || player_W_list == NULL) {
+		printf("Memory Error in init()\n");
+		exit(-2);
+	}
 	player = B;
 	player_B_list_size = 0;
 	player_W_list_size = 0;
@@ -133,7 +153,7 @@ void print_board() {
 
 // prompt the user, return index of board (or index of command)
 int prompt() {
-	printf("Type: [row][col] or 0[cmd]\n");
+	printf("Type [row][col] or 0[cmd]: ");
 	int row_input;
 	char col_input;
 	scanf_s("%d%c", &row_input, &col_input, 1);
@@ -143,6 +163,12 @@ int prompt() {
 	if (row_input == 0) {
 		if (col_input == 'q') {
 			return -2;
+		}
+		if (col_input == 'w') {
+			return -3;
+		}
+		if (col_input == 'r') {
+			return -4;
 		}
 		return -1;
 	}
@@ -291,7 +317,7 @@ int test_jie(int index) {
 	return 0;
 }
 
-// validate the move to index is valid (removes died pieces and write the new piece to board)
+// validate the move to index (remove died pieces and write the new piece to board)
 // return -1 if not able to validate it
 int validate_move(int index) {
 	char need_remove = 0;
@@ -363,4 +389,64 @@ int validate_move(int index) {
 		hand_record = 0;
 	}
 	return 0;
+}
+
+void write_game() {
+	char buf[100] = { 0 };
+	printf("Type file name [filename].go: ");
+	scanf_s("%s", buf, 100);
+	FILE* fp;
+	fopen_s(&fp, buf, "wb");
+	if (fp == NULL) {
+		printf("Fail to create/open the file %s\n", buf);
+		return;
+	}
+	fwrite(&bsize, 1, 4, fp);
+	fwrite(&player_B_list_size, 1, 4, fp);
+	fwrite(&player_W_list_size, 1, 4, fp);
+	for (int i = 0; i < player_B_list_size; i++) {
+		fwrite(&player_B_list[i], 1, 4, fp);
+	}
+	for (int i = 0; i < player_W_list_size; i++) {
+		fwrite(&player_W_list[i], 1, 4, fp);
+	}
+	fclose(fp);
+	printf("Game stored in the file %s\n", buf);
+}
+
+void read_game() {
+	char buf[100] = { 0 };
+	int player_B_len = 0, player_W_len = 0;
+	int* moves;
+	printf("Type file name [filename].go: ");
+	scanf_s("%s", buf, 100);
+	FILE* fp;
+	fopen_s(&fp, buf, "rb");
+	if (fp == NULL) {
+		printf("Fail to open the file %s\n", buf);
+		return;
+	}
+	end();
+	fread(&bsize, 1, 4, fp);
+	fread(&player_B_len, 1, 4, fp);
+	fread(&player_W_len, 1, 4, fp);
+	moves = (int*)calloc(player_B_len + player_W_len, sizeof(int));
+	if (moves == NULL) {
+		printf("Memory Error in read_game()\n");
+		exit(-2);
+	}
+	init();
+	print_board();
+	for (int i = 0; i < player_B_len; i++) {
+		fread(moves + 2 * i, 1, 4, fp);
+	}
+	for (int i = 0; i < player_W_len; i++) {
+		fread(moves + 2 * i + 1, 1, 4, fp);
+	}
+	for(int i = 0; i< player_B_len + player_W_len; i++) {
+		validate_move(moves[i]);
+		display();
+	}
+	free(moves);
+	fclose(fp);
 }
