@@ -14,6 +14,8 @@ char* pure_board; // died (fake living) piece removed from board
 char player;
 int* piece_index_buf; // store the piece indices that have already been searched
 int* qi_index_buf; // store the qi indices that have already been searched
+int piece_buf_size; // store the number of pieces after calling calculate_qi()
+int qi_buf_size; // store the number of qis after calling calculate_qi()
 int* player_B_list; // store both players' records
 int* player_W_list;
 int player_B_list_size;
@@ -28,7 +30,7 @@ void print_board();
 void display();
 int prompt();
 void switch_player();
-int calculate_qi(int index);
+void calculate_qi(int index);
 int validate_move(int index);
 void add_record(int index);
 void write_game();
@@ -253,8 +255,6 @@ int prompt() {
 }
 
 // calculate_qi helper functions
-int piece_buf_size;
-int qi_buf_size;
 int piece_contain_index(int index) {
 	for (int i = 0; i < piece_buf_size; i++) {
 		if (piece_index_buf[i] == index)
@@ -284,21 +284,19 @@ void qi_add_index(int index) {
 	qi_buf_size++;
 }
 // recursively calculate qi
-int calculate_qi_helper(int index) {
-	int num_qi = 0;
+void calculate_qi_helper(int index) {
 	piece_add_index(index);
 	// Look at right if it has
 	if ((index + 1) % bsize != 0) {
 		if (board[index + 1] == 0) {
 			if (!qi_contain_index(index + 1)) {
-				num_qi++;
 				qi_add_index(index + 1);
 			}
 		}
 		else if (board[index] == board[index + 1]) {
 			// If this piece has not been searched
 			if (!piece_contain_index(index + 1)) {
-				num_qi += calculate_qi_helper(index + 1);
+				calculate_qi_helper(index + 1);
 			}
 		}
 	}
@@ -306,14 +304,13 @@ int calculate_qi_helper(int index) {
 	if (index % bsize != 0) {
 		if (board[index - 1] == 0) {
 			if (!qi_contain_index(index - 1)) {
-				num_qi++;
 				qi_add_index(index - 1);
 			}
 		}
 		else if (board[index] == board[index - 1]) {
 			// If this piece has not been searched
 			if (!piece_contain_index(index - 1)) {
-				num_qi += calculate_qi_helper(index - 1);
+				calculate_qi_helper(index - 1);
 			}
 		}
 	}
@@ -321,14 +318,13 @@ int calculate_qi_helper(int index) {
 	if (index >= bsize) {
 		if (board[index - bsize] == 0) {
 			if (!qi_contain_index(index - bsize)) {
-				num_qi++;
 				qi_add_index(index - bsize);
 			}
 		}
 		else if (board[index] == board[index - bsize]) {
 			// If this piece has not been searched
 			if (!piece_contain_index(index - bsize)) {
-				num_qi += calculate_qi_helper(index - bsize);
+				calculate_qi_helper(index - bsize);
 			}
 		}
 	}
@@ -336,24 +332,22 @@ int calculate_qi_helper(int index) {
 	if (index < bsize * bsize - bsize) {
 		if (board[index + bsize] == 0) {
 			if (!qi_contain_index(index + bsize)) {
-				num_qi++;
 				qi_add_index(index + bsize);
 			}
 		}
 		else if (board[index] == board[index + bsize]) {
 			// If this piece has not been searched
 			if (!piece_contain_index(index + bsize)) {
-				num_qi += calculate_qi_helper(index + bsize);
+				calculate_qi_helper(index + bsize);
 			}
 		}
 	}
-	return num_qi;
 }
 // calculate qi, assuming board[index] is either B or W
-int calculate_qi(int index) {
+void calculate_qi(int index) {
 	piece_buf_size = 0;
 	qi_buf_size = 0;
-	return calculate_qi_helper(index);
+	calculate_qi_helper(index);
 }
 
 
@@ -398,7 +392,8 @@ int validate_move(int index) {
 	// test right
 	if ((index + 1) % bsize != 0) {
 		if (board[index] != board[index + 1] && board[index + 1] != 0) {
-			if (calculate_qi(index + 1) == 0) {
+			calculate_qi(index + 1);
+			if (qi_buf_size == 0) {
 				if (test_jie(index)) {
 					board[index] = 0;
 					return -1;
@@ -411,7 +406,8 @@ int validate_move(int index) {
 	// test left
 	if (index % bsize != 0) {
 		if (board[index] != board[index - 1] && board[index - 1] != 0) {
-			if (calculate_qi(index - 1) == 0) {
+			calculate_qi(index - 1);
+			if (qi_buf_size == 0) {
 				if (test_jie(index)) {
 					board[index] = 0;
 					return -1;
@@ -424,7 +420,8 @@ int validate_move(int index) {
 	// test top
 	if (index >= bsize) {
 		if (board[index] != board[index - bsize] && board[index - bsize] != 0) {
-			if (calculate_qi(index - bsize) == 0) {
+			calculate_qi(index - bsize);
+			if (qi_buf_size == 0) {
 				if (test_jie(index)) {
 					board[index] = 0;
 					return -1;
@@ -437,7 +434,8 @@ int validate_move(int index) {
 	// test bottom
 	if (index < bsize * bsize - bsize) {
 		if (board[index] != board[index + bsize] && board[index + bsize] != 0) {
-			if (calculate_qi(index + bsize) == 0) {
+			calculate_qi(index + bsize);
+			if (qi_buf_size == 0) {
 				if (test_jie(index)) {
 					board[index] = 0;
 					return -1;
@@ -448,7 +446,8 @@ int validate_move(int index) {
 		}
 	}
 	// invalid suicide move
-	if (calculate_qi(index) == 0 && need_remove == 0) {
+	calculate_qi(index);
+	if (qi_buf_size == 0 && need_remove == 0) {
 		board[index] = 0;
 		return -1;
 	}
@@ -536,7 +535,8 @@ void print_qi() {
 		printf("Invalid lookup\n");
 	}
 	else {
-		printf("QI at %d%c: %d\n", 1 + index / bsize, index % bsize + 65, calculate_qi(index));
+		calculate_qi(index);
+		printf("QI at %d%c: %d\n", 1 + index / bsize, index % bsize + 65, qi_buf_size);
 	}
 	
 }
@@ -628,10 +628,35 @@ float count_mu() {
 	return num_B;
 }
 
-
-// remove died pieces from board and write the result to pure_board
+// Remove died pieces from board and write the result to pure_board
 void remove_died() {
-
+	for (int i = 0; i < bsize * bsize; i++) {
+		if (board[i] == 0) {
+			pure_board[i] = 0;
+			continue;
+		}
+		calculate_qi(i);
+		// died piece
+		if (qi_buf_size == 1) {
+			pure_board[i] = 0;
+			continue;
+		}
+		// must contain 2 yans (i.e 2 qis are yans)
+		// First version: we consider a qi with no enemy nextby and at least 2 our pieces as a yan
+		if (qi_buf_size <= 5) {
+			int num_yan = 0;
+			for (int j = 0; j < qi_buf_size; j++) {
+				int qi_index = qi_index_buf[j];
+				// right
+				if ((qi_index + 1) % 9 != 0) {
+					if (board[qi_index + 1] != board[i]) {
+						continue;
+						//////////////////////////////////////////////
+					}
+				}
+			}
+		}
+	}
 }
 
 // Play the best hand
