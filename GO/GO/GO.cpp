@@ -31,6 +31,7 @@ void display();
 int prompt();
 void switch_player();
 void calculate_qi(int index);
+void piece_remove_buf(char* b);
 int validate_move(int index);
 void add_record(int index);
 void write_game();
@@ -38,6 +39,7 @@ void read_game();
 void print_qi();
 void calculate_mu();
 float count_mu();
+int identify_yan(int qi_index, int our_pieces);
 void remove_died();
 int best_play();
 
@@ -169,6 +171,46 @@ void print_board() {
 				printf("┼ ");
 			}
 		}
+		// print pure_board
+		if (i < 9)
+			printf("\t\t%d ", i + 1);
+		else
+			printf("\t\t%d", i + 1);
+		for (int j = 0; j < bsize; j++) {
+			if (pure_board[i * bsize + j] == B) {
+				printf("○");
+			}
+			else if (pure_board[i * bsize + j] == W) {
+				printf("●");
+			}
+			else if (i == 0 && j == 0) {
+				printf("┌ ");
+			}
+			else if (i == 0 && j == bsize - 1) {
+				printf("┐ ");
+			}
+			else if (i == bsize - 1 && j == bsize - 1) {
+				printf("┘ ");
+			}
+			else if (i == bsize - 1 && j == 0) {
+				printf("└ ");
+			}
+			else if (i == 0) {
+				printf("┬ ");
+			}
+			else if (i == bsize - 1) {
+				printf("┴ ");
+			}
+			else if (j == bsize - 1) {
+				printf("┤ ");
+			}
+			else if (j == 0) {
+				printf("├ ");
+			}
+			else {
+				printf("┼ ");
+			}
+		}
 		// print mu_board
 		if (i < 9)
 			printf("\t\t%d ", i + 1);
@@ -211,7 +253,12 @@ void print_board() {
 		}
 		printf("\n");
 	}
+
 	printf("  ");
+	for (int i = 0; i < bsize; i++) {
+		printf("%c ", 65 + i);
+	}
+	printf("\t\t  ");
 	for (int i = 0; i < bsize; i++) {
 		printf("%c ", 65 + i);
 	}
@@ -266,10 +313,10 @@ void piece_add_index(int index) {
 	piece_index_buf[piece_buf_size] = index;
 	piece_buf_size++;
 }
-// remove the pieces from the board based on piece_buf
-void piece_remove_buf() {
+// remove the pieces from the b based on piece_buf
+void piece_remove_buf(char *b) {
 	for (int i = 0; i < piece_buf_size; i++) {
-		board[piece_index_buf[i]] = 0;
+		b[piece_index_buf[i]] = 0;
 	}
 }
 int qi_contain_index(int index) {
@@ -398,7 +445,7 @@ int validate_move(int index) {
 					board[index] = 0;
 					return -1;
 				}
-				piece_remove_buf();
+				piece_remove_buf(board);
 				need_remove = 1;
 			}
 		}
@@ -412,7 +459,7 @@ int validate_move(int index) {
 					board[index] = 0;
 					return -1;
 				}
-				piece_remove_buf();
+				piece_remove_buf(board);
 				need_remove = 1;
 			}
 		}
@@ -426,7 +473,7 @@ int validate_move(int index) {
 					board[index] = 0;
 					return -1;
 				}
-				piece_remove_buf();
+				piece_remove_buf(board);
 				need_remove = 1;
 			}
 		}
@@ -440,7 +487,7 @@ int validate_move(int index) {
 					board[index] = 0;
 					return -1;
 				}
-				piece_remove_buf();
+				piece_remove_buf(board);
 				need_remove = 1;
 			}
 		}
@@ -608,7 +655,8 @@ void calculate_mu_helper(char *b, char *w, int ext) {
 // Calculate mu and write the result in mu_board
 // First version: ignore the existance of fake living piece
 void calculate_mu() {
-	calculate_mu_helper(board,mu_tmp_board, 1);
+	remove_died();
+	calculate_mu_helper(pure_board,mu_tmp_board, 1);
 	//calculate_mu_helper(mu_tmp_board, mu_tmp2_board, 2);
 	calculate_mu_helper(mu_tmp_board, mu_board, 2);
 }
@@ -628,32 +676,85 @@ float count_mu() {
 	return num_B;
 }
 
+// Identify whether a qi is a yan or not, our_pieces specifies the number of our pieces needed
+// return 1 if it's a yan
+int identify_yan(int qi_index, int our_pieces) {
+	int our_side = board[piece_index_buf[0]]; //either B or W
+	int num_our_piece = 0;
+	// right
+	if ((qi_index + 1) % 9 != 0) {
+		// enemy
+		if (board[qi_index + 1] != 0 && board[qi_index + 1] != our_side) {
+			return 0;
+		}
+		if (board[qi_index + 1] == our_side) {
+			num_our_piece++;
+		}
+	}
+	// left
+	if (qi_index % 9 != 0) {
+		// enemy
+		if (board[qi_index - 1] != 0 && board[qi_index - 1] != our_side) {
+			return 0;
+		}
+		if (board[qi_index - 1] == our_side) {
+			num_our_piece++;
+		}
+	}
+	// top
+	if (qi_index >= bsize) {
+		// enemy
+		if (board[qi_index - bsize] != 0 && board[qi_index - bsize] != our_side) {
+			return 0;
+		}
+		if (board[qi_index - bsize] == our_side) {
+			num_our_piece++;
+		}
+	}
+	// bottom
+	if (qi_index + bsize < bsize * bsize) {
+		// enemy
+		if (board[qi_index + bsize] != 0 && board[qi_index + bsize] != our_side) {
+			return 0;
+		}
+		if (board[qi_index + bsize] == our_side) {
+			num_our_piece++;
+		}
+	}
+	if (num_our_piece >= our_pieces) {
+		return 1;
+	}
+	return 0;
+}
+
 // Remove died pieces from board and write the result to pure_board
 void remove_died() {
+	// Copy
 	for (int i = 0; i < bsize * bsize; i++) {
-		if (board[i] == 0) {
-			pure_board[i] = 0;
+		pure_board[i] = board[i];
+	}
+	for (int i = 0; i < bsize * bsize; i++) {
+		if (pure_board[i] == 0) {
 			continue;
 		}
 		calculate_qi(i);
 		// died piece
 		if (qi_buf_size == 1) {
-			pure_board[i] = 0;
+			piece_remove_buf(pure_board);
 			continue;
 		}
-		// must contain 2 yans (i.e 2 qis are yans)
-		// First version: we consider a qi with no enemy nextby and at least 2 our pieces as a yan
-		if (qi_buf_size <= 5) {
+		// must contain 2 at least less strict yans (i.e 2 qis are yans)
+		else if (qi_buf_size <= 5) {
 			int num_yan = 0;
 			for (int j = 0; j < qi_buf_size; j++) {
 				int qi_index = qi_index_buf[j];
-				// right
-				if ((qi_index + 1) % 9 != 0) {
-					if (board[qi_index + 1] != board[i]) {
-						continue;
-						//////////////////////////////////////////////
-					}
+				if (identify_yan(qi_index, 1)) {
+					num_yan++;
 				}
+			}
+			if (num_yan < 2) {
+				piece_remove_buf(pure_board);
+				continue;
 			}
 		}
 	}
