@@ -7,6 +7,10 @@
 
 int bsize = 0; // board has size bsize*bsize
 char* board;
+char* mu_board; // store global black/white state
+char* mu_tmp_board; // store first time calculated (tmp) global black/white state
+char* mu_tmp2_board; // store first second calculated (tmp) global black/white state
+char* pure_board; // died (fake living) piece removed from board
 char player;
 int* piece_index_buf; // store the piece indices that have already been searched
 int* qi_index_buf; // store the qi indices that have already been searched
@@ -29,12 +33,17 @@ int validate_move(int index);
 void add_record(int index);
 void write_game();
 void read_game();
+void print_qi();
+void calculate_mu();
+float count_mu();
+void remove_died();
+int best_play();
 
 // main function
 int main(int argc, char* argv[]) {
 	if (argc > 1)
 		bsize = atoi(argv[1]);
-	if (bsize == 0)
+	if (bsize < 7 || bsize > 26)
 		bsize = 9; // default board size
 	init();
 	print_board();
@@ -54,8 +63,13 @@ int main(int argc, char* argv[]) {
 			read_game();
 			continue;
 		}
+		if (index == -5) {
+			print_qi();
+			continue;
+		}
 		if (validate_move(index) == -1)
 			continue;
+		calculate_mu();
 		display();
 	}
 }
@@ -70,18 +84,24 @@ void display() {
 	printf("\nWHITE record: ");
 	for (int i = 0; i < player_W_list_size; i++)
 		printf("%d%c ", player_W_list[i] / bsize + 1, player_W_list[i] % bsize + 65);
+	float num_B = count_mu();
+	printf("\nCurrent MU: Black VS. White = %.1f : %.1f", num_B, (double)bsize * bsize - num_B);
 	printf("\n\n");
 }
 
 // Init and end
 void init() {
 	board = (char*)calloc(bsize * bsize, sizeof(char));
+	mu_board = (char*)calloc(bsize * bsize, sizeof(char));
+	mu_tmp_board = (char*)calloc(bsize * bsize, sizeof(char));
+	mu_tmp2_board = (char*)calloc(bsize * bsize, sizeof(char));
+	pure_board = (char*)calloc(bsize * bsize, sizeof(char));
 	piece_index_buf = (int*)calloc(bsize * bsize, sizeof(int));
 	qi_index_buf = (int*)calloc(bsize * bsize, sizeof(int));
 	player_B_list = (int*)calloc(bsize * bsize, sizeof(int));
 	player_W_list = (int*)calloc(bsize * bsize, sizeof(int));
-	if (board == NULL || piece_index_buf == NULL || qi_index_buf == NULL ||
-		player_B_list == NULL || player_W_list == NULL) {
+	if (board == NULL || mu_board == NULL || mu_tmp_board == NULL || mu_tmp2_board == NULL || pure_board == NULL ||
+		piece_index_buf == NULL || qi_index_buf == NULL || player_B_list == NULL || player_W_list == NULL) {
 		printf("Memory Error in init()\n");
 		exit(-2);
 	}
@@ -94,6 +114,10 @@ void init() {
 
 void end() {
 	free(board);
+	free(mu_board);
+	free(mu_tmp_board);
+	free(mu_tmp2_board);
+	free(pure_board);
 	free(piece_index_buf);
 	free(qi_index_buf);
 	free(player_B_list);
@@ -103,6 +127,7 @@ void end() {
 // Print the board
 void print_board() {
 	for (int i = 0; i < bsize; i++) {
+		// print board
 		if (i < 9)
 			printf("%d ", i + 1);
 		else
@@ -142,9 +167,53 @@ void print_board() {
 				printf("┼ ");
 			}
 		}
+		// print mu_board
+		if (i < 9)
+			printf("\t\t%d ", i + 1);
+		else
+			printf("\t\t%d", i + 1);
+		for (int j = 0; j < bsize; j++) {
+			if (mu_board[i * bsize + j] == B) {
+				printf("○");
+			}
+			else if (mu_board[i * bsize + j] == W) {
+				printf("●");
+			}
+			else if (i == 0 && j == 0) {
+				printf("┌ ");
+			}
+			else if (i == 0 && j == bsize - 1) {
+				printf("┐ ");
+			}
+			else if (i == bsize - 1 && j == bsize - 1) {
+				printf("┘ ");
+			}
+			else if (i == bsize - 1 && j == 0) {
+				printf("└ ");
+			}
+			else if (i == 0) {
+				printf("┬ ");
+			}
+			else if (i == bsize - 1) {
+				printf("┴ ");
+			}
+			else if (j == bsize - 1) {
+				printf("┤ ");
+			}
+			else if (j == 0) {
+				printf("├ ");
+			}
+			else {
+				printf("┼ ");
+			}
+		}
 		printf("\n");
 	}
 	printf("  ");
+	for (int i = 0; i < bsize; i++) {
+		printf("%c ", 65 + i);
+	}
+	printf("\t\t  ");
 	for (int i = 0; i < bsize; i++) {
 		printf("%c ", 65 + i);
 	}
@@ -169,6 +238,9 @@ int prompt() {
 		}
 		if (col_input == 'r') {
 			return -4;
+		}
+		if (col_input == 'i') {
+			return -5;
 		}
 		return -1;
 	}
@@ -445,8 +517,125 @@ void read_game() {
 	}
 	for(int i = 0; i< player_B_len + player_W_len; i++) {
 		validate_move(moves[i]);
+		calculate_mu();
 		display();
 	}
 	free(moves);
 	fclose(fp);
+}
+
+void print_qi() {
+	printf("Look up QI at [row][col]: ");
+	int row_input;
+	char col_input;
+	scanf_s("%d%c", &row_input, &col_input, 1);
+	int row = row_input - 1;
+	int col = col_input - 65;
+	int index = row * bsize + col;
+	if (row < 0 || row >= bsize || col < 0 || col >= bsize || board[index] == 0) {
+		printf("Invalid lookup\n");
+	}
+	else {
+		printf("QI at %d%c: %d\n", 1 + index / bsize, index % bsize + 65, calculate_qi(index));
+	}
+	
+}
+
+void calculate_mu_helper(char *b, char *w, int ext) {
+	// Set w as b
+	for (int i = 0; i < bsize * bsize; i++) {
+		w[i] = b[i];
+	}
+	// Set empty slot based on 4 directions
+	for (int i = 0; i < bsize * bsize; i++) {
+		if (w[i] == 0) {
+			// Go though mu_board in 4 directions until encounter non-empty piece
+			char num_B = 0;
+			char num_W = 0;
+			// right
+			for (int j = i + 1; j % bsize != 0 && j <= i + ext; j++) {
+				if (b[j] == B) {
+					num_B++;
+					break;
+				}
+				if (b[j] == W) {
+					num_W++;
+					break;
+				}
+			}
+			// left
+			for (int j = i - 1; (j + 1) % bsize != 0 && j >= i - ext; j--) {
+				if (b[j] == B) {
+					num_B++;
+					break;
+				}
+				if (b[j] == W) {
+					num_W++;
+					break;
+				}
+			}
+			// top
+			for (int j = i - bsize; j >= 0 && j >= i - ext * bsize; j -= bsize) {
+				if (b[j] == B) {
+					num_B++;
+					break;
+				}
+				if (b[j] == W) {
+					num_W++;
+					break;
+				}
+			}
+			// bottom
+			for (int j = i + bsize; j < bsize * bsize && j <= i + ext * bsize; j += bsize) {
+				if (b[j] == B) {
+					num_B++;
+					break;
+				}
+				if (b[j] == W) {
+					num_W++;
+					break;
+				}
+			}
+			if (num_B != 0 && num_W == 0) {
+				w[i] = B;
+			}
+			if (num_W != 0 && num_B == 0) {
+				w[i] = W;
+			}
+		}
+	}
+}
+// Calculate mu and write the result in mu_board
+// First version: ignore the existance of fake living piece
+void calculate_mu() {
+	calculate_mu_helper(board,mu_tmp_board, 1);
+	//calculate_mu_helper(mu_tmp_board, mu_tmp2_board, 2);
+	calculate_mu_helper(mu_tmp_board, mu_board, 2);
+}
+
+// Count mu through mu_board, return black's number of mus
+// white's number of mus = bsize * bsize - black's number of mus
+float count_mu() {
+	float num_B = 0;
+	for (int i = 0; i < bsize * bsize; i++) {
+		if (mu_board[i] == B) {
+			num_B += 1;
+		}
+		if (mu_board[i] == 0) {
+			num_B += 0.5;
+		}
+	}
+	return num_B;
+}
+
+
+// remove died pieces from board and write the result to pure_board
+void remove_died() {
+
+}
+
+// Play the best hand
+// First version
+int best_play() {
+	return -1;
 }
