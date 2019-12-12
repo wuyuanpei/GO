@@ -657,8 +657,8 @@ void calculate_mu_helper(char *b, char *w, int ext) {
 void calculate_mu() {
 	remove_died();
 	calculate_mu_helper(pure_board,mu_tmp_board, 1);
-	//calculate_mu_helper(mu_tmp_board, mu_tmp2_board, 2);
-	calculate_mu_helper(mu_tmp_board, mu_board, 2);
+	calculate_mu_helper(mu_tmp_board, mu_tmp2_board, 1);
+	calculate_mu_helper(mu_tmp2_board, mu_board, 2);
 }
 
 // Count mu through mu_board, return black's number of mus
