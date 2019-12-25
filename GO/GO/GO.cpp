@@ -111,8 +111,8 @@ void init() {
 	pure_board = (char*)calloc(bsize * bsize, sizeof(char));
 	piece_index_buf = (int*)calloc(bsize * bsize, sizeof(int));
 	qi_index_buf = (int*)calloc(bsize * bsize, sizeof(int));
-	player_B_list = (int*)calloc(bsize * bsize, sizeof(int));
-	player_W_list = (int*)calloc(bsize * bsize, sizeof(int));
+	player_B_list = (int*)calloc(2 * bsize * bsize, sizeof(int)); // Ensure no overflow
+	player_W_list = (int*)calloc(2 * bsize * bsize, sizeof(int));
 	if (board == NULL || mu_board == NULL || mu_tmp_board == NULL || mu_tmp2_board == NULL || pure_board == NULL ||
 		piece_index_buf == NULL || qi_index_buf == NULL || player_B_list == NULL || player_W_list == NULL) {
 		printf("Memory Error in init()\n");
