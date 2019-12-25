@@ -4,6 +4,7 @@
 
 #define B 1 // Two players
 #define W 2
+#define best_play_v1 best_play
 
 int bsize = 0; // board has size bsize*bsize
 char* board;
@@ -30,6 +31,7 @@ void print_board();
 void display();
 int prompt();
 void switch_player();
+void copy_board(char* r, char* w);
 void calculate_qi(int index);
 void piece_remove_buf(char* b);
 int validate_move(int index);
@@ -39,9 +41,12 @@ void read_game();
 void print_qi();
 void calculate_mu();
 float count_mu();
-int identify_yan(int qi_index, int our_pieces);
+int identify_yan(int qi_index, int our_pieces, int our_side);
 void remove_died();
-int best_play();
+void print_best_play();
+
+int best_play_v1();
+int best_play_v2();
 
 // main function
 int main(int argc, char* argv[]) {
@@ -69,6 +74,10 @@ int main(int argc, char* argv[]) {
 		}
 		if (index == -5) {
 			print_qi();
+			continue;
+		}
+		if (index == -6) {
+			print_best_play();
 			continue;
 		}
 		if (validate_move(index) == -1)
@@ -291,6 +300,9 @@ int prompt() {
 		if (col_input == 'i') {
 			return -5;
 		}
+		if (col_input == 's') {
+			return -6;
+		}
 		return -1;
 	}
 	else if (row < 0 || row >= bsize || col < 0 || col >= bsize || board[index] != 0) {
@@ -298,6 +310,13 @@ int prompt() {
 	}
 	else {
 		return index;
+	}
+}
+
+// copy a board from r to w
+void copy_board(char* r, char* w) {
+	for (int i = 0; i < bsize * bsize; i++) {
+		w[i] = r[i];
 	}
 }
 
@@ -313,7 +332,7 @@ void piece_add_index(int index) {
 	piece_index_buf[piece_buf_size] = index;
 	piece_buf_size++;
 }
-// remove the pieces from the b based on piece_buf
+// remove the pieces from the b based on piece_index_buf
 void piece_remove_buf(char *b) {
 	for (int i = 0; i < piece_buf_size; i++) {
 		b[piece_index_buf[i]] = 0;
@@ -590,9 +609,7 @@ void print_qi() {
 
 void calculate_mu_helper(char *b, char *w, int ext) {
 	// Set w as b
-	for (int i = 0; i < bsize * bsize; i++) {
-		w[i] = b[i];
-	}
+	copy_board(b, w);
 	// Set empty slot based on 4 directions
 	for (int i = 0; i < bsize * bsize; i++) {
 		if (w[i] == 0) {
@@ -677,12 +694,12 @@ float count_mu() {
 }
 
 // Identify whether a qi is a yan or not, our_pieces specifies the number of our pieces needed
+// our_side is either B or W
 // return 1 if it's a yan
-int identify_yan(int qi_index, int our_pieces) {
-	int our_side = board[piece_index_buf[0]]; //either B or W
+int identify_yan(int qi_index, int our_pieces, int our_side) {
 	int num_our_piece = 0;
 	// right
-	if ((qi_index + 1) % 9 != 0) {
+	if ((qi_index + 1) % bsize != 0) {
 		// enemy
 		if (board[qi_index + 1] != 0 && board[qi_index + 1] != our_side) {
 			return 0;
@@ -692,7 +709,7 @@ int identify_yan(int qi_index, int our_pieces) {
 		}
 	}
 	// left
-	if (qi_index % 9 != 0) {
+	if (qi_index % bsize != 0) {
 		// enemy
 		if (board[qi_index - 1] != 0 && board[qi_index - 1] != our_side) {
 			return 0;
@@ -730,9 +747,7 @@ int identify_yan(int qi_index, int our_pieces) {
 // Remove died pieces from board and write the result to pure_board
 void remove_died() {
 	// Copy
-	for (int i = 0; i < bsize * bsize; i++) {
-		pure_board[i] = board[i];
-	}
+	copy_board(board, pure_board);
 	for (int i = 0; i < bsize * bsize; i++) {
 		if (pure_board[i] == 0) {
 			continue;
@@ -743,12 +758,30 @@ void remove_died() {
 			piece_remove_buf(pure_board);
 			continue;
 		}
+		// must contain 1 strict yans and 1 less strict yan(i.e 2 qis are yans)
+		else if (qi_buf_size == 2) {
+			int num_yan_s = 0;
+			int num_yan_ls = 0;
+			for (int j = 0; j < qi_buf_size; j++) {
+				int qi_index = qi_index_buf[j];
+				if (identify_yan(qi_index, 2, pure_board[i])) {
+					num_yan_s++;
+				}
+				if (identify_yan(qi_index, 1, pure_board[i])) {
+					num_yan_ls++;
+				}
+			}
+			if (num_yan_s < 1 || num_yan_ls < 2) {
+				piece_remove_buf(pure_board);
+				continue;
+			}
+		}
 		// must contain 2 at least less strict yans (i.e 2 qis are yans)
 		else if (qi_buf_size <= 5) {
 			int num_yan = 0;
 			for (int j = 0; j < qi_buf_size; j++) {
 				int qi_index = qi_index_buf[j];
-				if (identify_yan(qi_index, 1)) {
+				if (identify_yan(qi_index, 1, pure_board[i])) {
 					num_yan++;
 				}
 			}
@@ -760,8 +793,33 @@ void remove_died() {
 	}
 }
 
+// Print the result of best_play()
+void print_best_play() {
+	int index = best_play();
+	if (index == -1) {
+		printf("Suggestion: STOP\n");
+	}
+	else {
+		printf("Suggestion: %d%c\n", index / bsize + 1, index % bsize + 65);
+	}
+}
+
 // Play the best hand
 // First version
-int best_play() {
+int best_play_v1() {
+	char* test_board = (char*)calloc(bsize * bsize, sizeof(char));
+	if (test_board == NULL) {
+		printf("Memory Error in best_play_v1()\n");
+		exit(-2);
+	}
+	copy_board(board, test_board);
+
+	free(test_board);
 	return -1;
+}
+
+// Play the best hand
+// First version
+int best_play_v2() {
+	return 9;
 }
