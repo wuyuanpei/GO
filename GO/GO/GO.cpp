@@ -32,17 +32,17 @@ void display();
 int prompt();
 void switch_player();
 void copy_board(char* r, char* w);
-void calculate_qi(int index);
+void calculate_qi(int index, char* board);
 void piece_remove_buf(char* b);
 int validate_move(int index);
 void add_record(int index);
 void write_game();
 void read_game();
 void print_qi();
-void calculate_mu();
+void calculate_mu(char* b);
 float count_mu();
-int identify_yan(int qi_index, int our_pieces, int our_side);
-void remove_died();
+int identify_yan(int qi_index, int our_pieces, int our_side, char* board);
+void remove_died(char* b);
 void print_best_play();
 
 int best_play_v1();
@@ -82,7 +82,7 @@ int main(int argc, char* argv[]) {
 		}
 		if (validate_move(index) == -1)
 			continue;
-		calculate_mu();
+		calculate_mu(board);
 		display();
 	}
 }
@@ -333,7 +333,7 @@ void piece_add_index(int index) {
 	piece_buf_size++;
 }
 // remove the pieces from the b based on piece_index_buf
-void piece_remove_buf(char *b) {
+void piece_remove_buf(char* b) {
 	for (int i = 0; i < piece_buf_size; i++) {
 		b[piece_index_buf[i]] = 0;
 	}
@@ -350,7 +350,7 @@ void qi_add_index(int index) {
 	qi_buf_size++;
 }
 // recursively calculate qi
-void calculate_qi_helper(int index) {
+void calculate_qi_helper(int index, char* board) {
 	piece_add_index(index);
 	// Look at right if it has
 	if ((index + 1) % bsize != 0) {
@@ -362,7 +362,7 @@ void calculate_qi_helper(int index) {
 		else if (board[index] == board[index + 1]) {
 			// If this piece has not been searched
 			if (!piece_contain_index(index + 1)) {
-				calculate_qi_helper(index + 1);
+				calculate_qi_helper(index + 1, board);
 			}
 		}
 	}
@@ -376,7 +376,7 @@ void calculate_qi_helper(int index) {
 		else if (board[index] == board[index - 1]) {
 			// If this piece has not been searched
 			if (!piece_contain_index(index - 1)) {
-				calculate_qi_helper(index - 1);
+				calculate_qi_helper(index - 1, board);
 			}
 		}
 	}
@@ -390,7 +390,7 @@ void calculate_qi_helper(int index) {
 		else if (board[index] == board[index - bsize]) {
 			// If this piece has not been searched
 			if (!piece_contain_index(index - bsize)) {
-				calculate_qi_helper(index - bsize);
+				calculate_qi_helper(index - bsize, board);
 			}
 		}
 	}
@@ -404,16 +404,16 @@ void calculate_qi_helper(int index) {
 		else if (board[index] == board[index + bsize]) {
 			// If this piece has not been searched
 			if (!piece_contain_index(index + bsize)) {
-				calculate_qi_helper(index + bsize);
+				calculate_qi_helper(index + bsize, board);
 			}
 		}
 	}
 }
 // calculate qi, assuming board[index] is either B or W
-void calculate_qi(int index) {
+void calculate_qi(int index, char* board) {
 	piece_buf_size = 0;
 	qi_buf_size = 0;
-	calculate_qi_helper(index);
+	calculate_qi_helper(index, board);
 }
 
 
@@ -458,7 +458,7 @@ int validate_move(int index) {
 	// test right
 	if ((index + 1) % bsize != 0) {
 		if (board[index] != board[index + 1] && board[index + 1] != 0) {
-			calculate_qi(index + 1);
+			calculate_qi(index + 1, board);
 			if (qi_buf_size == 0) {
 				if (test_jie(index)) {
 					board[index] = 0;
@@ -472,7 +472,7 @@ int validate_move(int index) {
 	// test left
 	if (index % bsize != 0) {
 		if (board[index] != board[index - 1] && board[index - 1] != 0) {
-			calculate_qi(index - 1);
+			calculate_qi(index - 1, board);
 			if (qi_buf_size == 0) {
 				if (test_jie(index)) {
 					board[index] = 0;
@@ -486,7 +486,7 @@ int validate_move(int index) {
 	// test top
 	if (index >= bsize) {
 		if (board[index] != board[index - bsize] && board[index - bsize] != 0) {
-			calculate_qi(index - bsize);
+			calculate_qi(index - bsize, board);
 			if (qi_buf_size == 0) {
 				if (test_jie(index)) {
 					board[index] = 0;
@@ -500,7 +500,7 @@ int validate_move(int index) {
 	// test bottom
 	if (index < bsize * bsize - bsize) {
 		if (board[index] != board[index + bsize] && board[index + bsize] != 0) {
-			calculate_qi(index + bsize);
+			calculate_qi(index + bsize, board);
 			if (qi_buf_size == 0) {
 				if (test_jie(index)) {
 					board[index] = 0;
@@ -512,7 +512,7 @@ int validate_move(int index) {
 		}
 	}
 	// invalid suicide move
-	calculate_qi(index);
+	calculate_qi(index, board);
 	if (qi_buf_size == 0 && need_remove == 0) {
 		board[index] = 0;
 		return -1;
@@ -580,9 +580,9 @@ void read_game() {
 	for (int i = 0; i < player_W_len; i++) {
 		fread(moves + 2 * i + 1, 1, 4, fp);
 	}
-	for(int i = 0; i< player_B_len + player_W_len; i++) {
+	for (int i = 0; i < player_B_len + player_W_len; i++) {
 		validate_move(moves[i]);
-		calculate_mu();
+		calculate_mu(board);
 		display();
 	}
 	free(moves);
@@ -601,13 +601,13 @@ void print_qi() {
 		printf("Invalid lookup\n");
 	}
 	else {
-		calculate_qi(index);
+		calculate_qi(index, board);
 		printf("QI at %d%c: %d\n", 1 + index / bsize, index % bsize + 65, qi_buf_size);
 	}
-	
+
 }
 
-void calculate_mu_helper(char *b, char *w, int ext) {
+void calculate_mu_helper(char* b, char* w, int ext) {
 	// Set w as b
 	copy_board(b, w);
 	// Set empty slot based on 4 directions
@@ -670,10 +670,11 @@ void calculate_mu_helper(char *b, char *w, int ext) {
 	}
 }
 // Calculate mu and write the result in mu_board
-// First version: ignore the existance of fake living piece
-void calculate_mu() {
-	remove_died();
-	calculate_mu_helper(pure_board,mu_tmp_board, 1);
+// First version: ignore the existance of fake living pieces
+// Second version: has removed fake living pieces
+void calculate_mu(char * b) {
+	remove_died(b);
+	calculate_mu_helper(pure_board, mu_tmp_board, 1);
 	calculate_mu_helper(mu_tmp_board, mu_tmp2_board, 1);
 	calculate_mu_helper(mu_tmp2_board, mu_board, 2);
 }
@@ -696,7 +697,7 @@ float count_mu() {
 // Identify whether a qi is a yan or not, our_pieces specifies the number of our pieces needed
 // our_side is either B or W
 // return 1 if it's a yan
-int identify_yan(int qi_index, int our_pieces, int our_side) {
+int identify_yan(int qi_index, int our_pieces, int our_side, char* board) {
 	int num_our_piece = 0;
 	// right
 	if ((qi_index + 1) % bsize != 0) {
@@ -745,14 +746,14 @@ int identify_yan(int qi_index, int our_pieces, int our_side) {
 }
 
 // Remove died pieces from board and write the result to pure_board
-void remove_died() {
+void remove_died(char* b) {
 	// Copy
-	copy_board(board, pure_board);
+	copy_board(b, pure_board);
 	for (int i = 0; i < bsize * bsize; i++) {
 		if (pure_board[i] == 0) {
 			continue;
 		}
-		calculate_qi(i);
+		calculate_qi(i, b);
 		// died piece
 		if (qi_buf_size == 1) {
 			piece_remove_buf(pure_board);
@@ -764,10 +765,10 @@ void remove_died() {
 			int num_yan_ls = 0;
 			for (int j = 0; j < qi_buf_size; j++) {
 				int qi_index = qi_index_buf[j];
-				if (identify_yan(qi_index, 2, pure_board[i])) {
+				if (identify_yan(qi_index, 2, pure_board[i], b)) {
 					num_yan_s++;
 				}
-				if (identify_yan(qi_index, 1, pure_board[i])) {
+				if (identify_yan(qi_index, 1, pure_board[i], b)) {
 					num_yan_ls++;
 				}
 			}
@@ -781,7 +782,7 @@ void remove_died() {
 			int num_yan = 0;
 			for (int j = 0; j < qi_buf_size; j++) {
 				int qi_index = qi_index_buf[j];
-				if (identify_yan(qi_index, 1, pure_board[i])) {
+				if (identify_yan(qi_index, 1, pure_board[i], b)) {
 					num_yan++;
 				}
 			}
@@ -804,22 +805,120 @@ void print_best_play() {
 	}
 }
 
-// Play the best hand
-// First version
-int best_play_v1() {
+// Return the score of that index. Here, the score is the mu if the piece is on this index
+// If the score is -1, the index is not valid
+float best_play_v1_helper(int index) {
+	if (board[index] != 0)
+		return -1;
 	char* test_board = (char*)calloc(bsize * bsize, sizeof(char));
 	if (test_board == NULL) {
-		printf("Memory Error in best_play_v1()\n");
+		printf("Memory Error in best_play_v1_helper()\n");
 		exit(-2);
 	}
 	copy_board(board, test_board);
-
+	char need_remove = 0;
+	// Write the new piece down temporarily
+	test_board[index] = player;
+	// test right
+	if ((index + 1) % bsize != 0) {
+		if (test_board[index] != test_board[index + 1] && test_board[index + 1] != 0) {
+			calculate_qi(index + 1, test_board);
+			if (qi_buf_size == 0) {
+				// test jie
+				if (index == eaten_record && piece_buf_size == 1) {
+					free(test_board);
+					return -1;
+				}
+				piece_remove_buf(test_board);
+				need_remove = 1;
+			}
+		}
+	}
+	// test left
+	if (index % bsize != 0) {
+		if (test_board[index] != test_board[index - 1] && test_board[index - 1] != 0) {
+			calculate_qi(index - 1, test_board);
+			if (qi_buf_size == 0) {
+				if (index == eaten_record && piece_buf_size == 1) {
+					free(test_board);
+					return -1;
+				}
+				piece_remove_buf(test_board);
+				need_remove = 1;
+			}
+		}
+	}
+	// test top
+	if (index >= bsize) {
+		if (test_board[index] != test_board[index - bsize] && test_board[index - bsize] != 0) {
+			calculate_qi(index - bsize, test_board);
+			if (qi_buf_size == 0) {
+				if (index == eaten_record && piece_buf_size == 1) {
+					free(test_board);
+					return -1;
+				}
+				piece_remove_buf(test_board);
+				need_remove = 1;
+			}
+		}
+	}
+	// test bottom
+	if (index < bsize * bsize - bsize) {
+		if (test_board[index] != test_board[index + bsize] && test_board[index + bsize] != 0) {
+			calculate_qi(index + bsize, test_board);
+			if (qi_buf_size == 0) {
+				if (index == eaten_record && piece_buf_size == 1) {
+					free(test_board);
+					return -1;
+				}
+				piece_remove_buf(test_board);
+				need_remove = 1;
+			}
+		}
+	}
+	// invalid suicide move
+	calculate_qi(index, test_board);
+	if (qi_buf_size == 0 && need_remove == 0) {
+		free(test_board);
+		return -1;
+	}
+	calculate_mu(test_board);
 	free(test_board);
-	return -1;
+	float num_B = count_mu();
+	if (player == B)
+		return num_B;
+	else
+		return bsize * bsize - num_B;
 }
-
 // Play the best hand
 // First version
+int best_play_v1() {
+	float max_score = 0;
+	int index_buf[20] = { 0 }; // Store at most 20 and randomly pick one
+	int buf_size = 0;
+	for (int i = 0; i < bsize * bsize; i++) {
+		float score = best_play_v1_helper(i);
+		if (score > max_score) {
+			max_score = score;
+			buf_size = 1;
+			index_buf[0] = i;
+		}
+		else if (score == max_score && buf_size < 20) {
+			index_buf[buf_size] = i;
+			buf_size++;
+		}
+	}
+	if (buf_size == 0) {
+		return -1;
+	}
+	else {
+		return index_buf[rand() % buf_size];
+	}
+}
+
+
+// Play the best hand
+// Second version
 int best_play_v2() {
-	return 9;
+	return -1;
 }
