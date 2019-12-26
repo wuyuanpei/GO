@@ -282,8 +282,13 @@ void print_board() {
 int prompt() {
 	printf("Type [row][col] or 0[cmd]: ");
 	int row_input;
-	char col_input;
-	scanf_s("%d%c", &row_input, &col_input, 1);
+	char col_inputs[128] = { 0 };
+	if (!scanf_s("%d%s", &row_input, &col_inputs, 128) || col_inputs[1] != 0) {
+		while (getchar() != '\n'); // Invalid input
+		printf("Invalid input! Please type again.\n");
+		return -1;
+	}
+	char col_input = col_inputs[0];
 	int row = row_input - 1;
 	int col = col_input - 65;
 	int index = row * bsize + col;
@@ -303,9 +308,11 @@ int prompt() {
 		if (col_input == 's') {
 			return -6;
 		}
+		printf("Invalid input! Please type again.\n");
 		return -1;
 	}
 	else if (row < 0 || row >= bsize || col < 0 || col >= bsize || board[index] != 0) {
+		printf("Invalid input! Please type again.\n");
 		return -1;
 	}
 	else {
@@ -529,9 +536,9 @@ int validate_move(int index) {
 }
 
 void write_game() {
-	char buf[100] = { 0 };
+	char buf[128] = { 0 };
 	printf("Type file name [filename].go: ");
-	scanf_s("%s", buf, 100);
+	scanf_s("%s", buf, 128);
 	FILE* fp;
 	fopen_s(&fp, buf, "wb");
 	if (fp == NULL) {
@@ -552,11 +559,11 @@ void write_game() {
 }
 
 void read_game() {
-	char buf[100] = { 0 };
+	char buf[128] = { 0 };
 	int player_B_len = 0, player_W_len = 0;
 	int* moves;
 	printf("Type file name [filename].go: ");
-	scanf_s("%s", buf, 100);
+	scanf_s("%s", buf, 128);
 	FILE* fp;
 	fopen_s(&fp, buf, "rb");
 	if (fp == NULL) {
@@ -592,8 +599,13 @@ void read_game() {
 void print_qi() {
 	printf("Look up QI at [row][col]: ");
 	int row_input;
-	char col_input;
-	scanf_s("%d%c", &row_input, &col_input, 1);
+	char col_inputs[128] = { 0 };
+	if (!scanf_s("%d%s", &row_input, &col_inputs, 128) || col_inputs[1] != 0) {
+		while (getchar() != '\n'); // Invalid input
+		printf("Invalid lookup\n");
+		return;
+	}
+	char col_input = col_inputs[0];
 	int row = row_input - 1;
 	int col = col_input - 65;
 	int index = row * bsize + col;
@@ -894,7 +906,11 @@ float best_play_v1_helper(int index) {
 // First version
 int best_play_v1() {
 	float max_score = 0;
-	int index_buf[20] = { 0 }; // Store at most 20 and randomly pick one
+	int* index_buf = (int*)calloc(bsize * bsize, sizeof(int));
+	if (index_buf == NULL) {
+		printf("Memory Error in best_play_v1()\n");
+		exit(-2);
+	}
 	int buf_size = 0;
 	for (int i = 0; i < bsize * bsize; i++) {
 		float score = best_play_v1_helper(i);
@@ -903,16 +919,19 @@ int best_play_v1() {
 			buf_size = 1;
 			index_buf[0] = i;
 		}
-		else if (score == max_score && buf_size < 20) {
+		else if (score == max_score) {
 			index_buf[buf_size] = i;
 			buf_size++;
 		}
 	}
 	if (buf_size == 0) {
+		free(index_buf);
 		return -1;
 	}
 	else {
-		return index_buf[rand() % buf_size];
+		int index = index_buf[rand() % buf_size];
+		free(index_buf);
+		return index;
 	}
 }
 
