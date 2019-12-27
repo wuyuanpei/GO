@@ -986,7 +986,7 @@ int cmp(const void* a, const void* b) {
 }
 char* test_board_v2;
 p* p_buf;
-int** removed_pieces;
+stack * removed_pieces;
 int eaten_record_v2;
 int hand_record_v2;
 int hand_v2;
@@ -1117,11 +1117,7 @@ int best_play_v2_validate(int index) {
 		printf("Memory Error in best_play_v2_validate()\n");
 		exit(-2);
 	}
-	if (removed_pieces[index] != NULL) {
-		printf("ERROR: overwrite record in best_play_v2_validate()\n");
-		exit(-3);
-	}
-	removed_pieces[index] = removed_p_2;
+	push(removed_pieces, (int)removed_p_2);
 	return 0;
 }
 
@@ -1136,7 +1132,7 @@ void best_play_v2_restore(int index) {
 	else {
 		opponent = B;
 	}
-	int* removed_p = removed_pieces[index];
+	int* removed_p = (int *)pull(removed_pieces);
 	int i;
 	for (i = 0; i < removed_p[0]; i++) { //moved_p[0] stores the length
 		int idx = removed_p[i + 5];
@@ -1147,7 +1143,6 @@ void best_play_v2_restore(int index) {
 	eaten_record_v2 = removed_p[3];
 	hand_record_v2 = removed_p[4];
 	free(removed_p); 
-	removed_pieces[index] = NULL;
 }
 
 
@@ -1200,7 +1195,7 @@ void best_play_v2_helper() {
 int best_play_v2() {
 	test_board_v2 = (char*)calloc(bsize * bsize, sizeof(char)); // test_board used to test all possibilities
 	p_buf = (p*)calloc(bsize * bsize, sizeof(p)); // Store all possibilities
-	removed_pieces = (int**)calloc(bsize * bsize, sizeof(int*)); // Store recovery information
+	removed_pieces = stack_init(bsize * bsize); // Store recovery information
 	if (test_board_v2 == NULL || p_buf == NULL || removed_pieces == NULL) {
 		printf("Memory Error in best_play_v2()\n");
 		exit(-2);
@@ -1214,11 +1209,11 @@ int best_play_v2() {
 
 	free(test_board_v2);
 	p first = p_buf[0];
-	//for (int i = 0; i < bsize * bsize; i++) {
-	//	printf("(%d%c,%.1f) ", p_buf[i].index/bsize + 1,p_buf[i].index%bsize+65,p_buf[i].score);
-	//}
+	for (int i = 0; i < bsize * bsize; i++) {
+		printf("(%d%c,%.1f) ", p_buf[i].index/bsize + 1,p_buf[i].index%bsize+65,p_buf[i].score);
+	}
 	free(p_buf);
-	free(removed_pieces);
+	stack_end(removed_pieces);
 	// The first case happens at the end of the game (2 * bsize is the buffer size to let the game play)
 	// The second case happens when this hand cause opponent go stop
 	if (first.score > -2 * bsize && first.score < FLT_MAX_T - bsize * bsize) {
