@@ -1,6 +1,7 @@
 ﻿#include <stdio.h>
 #include <stdlib.h>
 #include <memory>
+#include "stack.h"
 
 #define B 1 // Two players
 #define W 2
@@ -974,7 +975,6 @@ int best_play_v1() {
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////
 // Fields used for best_play_v2
 struct p {
 	int index;
@@ -1214,9 +1214,9 @@ int best_play_v2() {
 
 	free(test_board_v2);
 	p first = p_buf[0];
-	for (int i = 0; i < bsize * bsize; i++) {
-		printf("(%d%c,%.1f) ", p_buf[i].index/bsize + 1,p_buf[i].index%bsize+65,p_buf[i].score);
-	}
+	//for (int i = 0; i < bsize * bsize; i++) {
+	//	printf("(%d%c,%.1f) ", p_buf[i].index/bsize + 1,p_buf[i].index%bsize+65,p_buf[i].score);
+	//}
 	free(p_buf);
 	free(removed_pieces);
 	// The first case happens at the end of the game (2 * bsize is the buffer size to let the game play)
@@ -1228,3 +1228,4 @@ int best_play_v2() {
 		return -1;
 	}
 }
+
