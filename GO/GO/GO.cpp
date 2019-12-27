@@ -4,7 +4,8 @@
 
 #define B 1 // Two players
 #define W 2
-#define best_play_v1 best_play
+#define FLT_MAX 999
+#define best_play_v2 best_play
 
 int bsize = 0; // board has size bsize*bsize
 char* board;
@@ -44,6 +45,7 @@ float count_mu();
 int identify_yan(int qi_index, int our_pieces, int our_side, char* board);
 void remove_died(char* b);
 void print_best_play();
+void do_best_play();
 
 int best_play_v1();
 int best_play_v2();
@@ -80,8 +82,14 @@ int main(int argc, char* argv[]) {
 			print_best_play();
 			continue;
 		}
-		if (validate_move(index) == -1)
+		if (index == -7) {
+			do_best_play();
 			continue;
+		}
+		if (validate_move(index) == -1) {
+			printf("Invalid input! Please type again.\n");
+			continue;
+		}
 		calculate_mu(board);
 		display();
 	}
@@ -308,10 +316,13 @@ int prompt() {
 		if (col_input == 's') {
 			return -6;
 		}
+		if (col_input == 'd') {
+			return -7;
+		}
 		printf("Invalid input! Please type again.\n");
 		return -1;
 	}
-	else if (row < 0 || row >= bsize || col < 0 || col >= bsize || board[index] != 0) {
+	else if (row < 0 || row >= bsize || col < 0 || col >= bsize) {
 		printf("Invalid input! Please type again.\n");
 		return -1;
 	}
@@ -459,6 +470,9 @@ int test_jie(int index) {
 // validate the move to index (remove died pieces and write the new piece to board)
 // return -1 if not able to validate it
 int validate_move(int index) {
+	if (board[index] != 0) {
+		return -1;
+	}
 	char need_remove = 0;
 	// Write the new piece down temporarily
 	board[index] = player;
@@ -817,11 +831,28 @@ void print_best_play() {
 	}
 }
 
-// Return the score of that index. Here, the score is the mu if the piece is on this index
-// If the score is -1, the index is not valid
-float best_play_v1_helper(int index) {
+// Do the result of best_play()
+void do_best_play() {
+	int index = best_play();
+	if (index == -1) {
+		printf("Suggestion: STOP\n");
+		return;
+	}
+	if (validate_move(index) == -1){
+		printf("ERROR: index returned by best_play() is invalid\n");
+		exit(-3);
+		return;
+	}
+	printf("Suggestion: %d%c\n", index / bsize + 1, index % bsize + 65);
+	calculate_mu(board);
+	display();
+}
+
+// Return the score of that index. Here, the score is the mu - pre_score
+// If the score is -FLT_MAX, the index is not valid
+float best_play_v1_helper(int index, float pre_score) {
 	if (board[index] != 0)
-		return -1;
+		return -FLT_MAX;
 	char* test_board = (char*)calloc(bsize * bsize, sizeof(char));
 	if (test_board == NULL) {
 		printf("Memory Error in best_play_v1_helper()\n");
@@ -839,7 +870,7 @@ float best_play_v1_helper(int index) {
 				// test jie
 				if (index == eaten_record && piece_buf_size == 1) {
 					free(test_board);
-					return -1;
+					return -FLT_MAX;
 				}
 				piece_remove_buf(test_board);
 				need_remove = 1;
@@ -853,7 +884,7 @@ float best_play_v1_helper(int index) {
 			if (qi_buf_size == 0) {
 				if (index == eaten_record && piece_buf_size == 1) {
 					free(test_board);
-					return -1;
+					return -FLT_MAX;
 				}
 				piece_remove_buf(test_board);
 				need_remove = 1;
@@ -867,7 +898,7 @@ float best_play_v1_helper(int index) {
 			if (qi_buf_size == 0) {
 				if (index == eaten_record && piece_buf_size == 1) {
 					free(test_board);
-					return -1;
+					return -FLT_MAX;
 				}
 				piece_remove_buf(test_board);
 				need_remove = 1;
@@ -881,7 +912,7 @@ float best_play_v1_helper(int index) {
 			if (qi_buf_size == 0) {
 				if (index == eaten_record && piece_buf_size == 1) {
 					free(test_board);
-					return -1;
+					return -FLT_MAX;
 				}
 				piece_remove_buf(test_board);
 				need_remove = 1;
@@ -892,28 +923,36 @@ float best_play_v1_helper(int index) {
 	calculate_qi(index, test_board);
 	if (qi_buf_size == 0 && need_remove == 0) {
 		free(test_board);
-		return -1;
+		return -FLT_MAX;
 	}
 	calculate_mu(test_board);
 	free(test_board);
 	float num_B = count_mu();
 	if (player == B)
-		return num_B;
+		return num_B - pre_score;
 	else
-		return bsize * bsize - num_B;
+		return bsize * bsize - num_B - pre_score;
 }
+
 // Play the best hand
-// First version
+// First version: this version only test the possibilities of the current hand of this player
 int best_play_v1() {
-	float max_score = 0;
+	float max_score = 0.5;
 	int* index_buf = (int*)calloc(bsize * bsize, sizeof(int));
 	if (index_buf == NULL) {
 		printf("Memory Error in best_play_v1()\n");
 		exit(-2);
 	}
 	int buf_size = 0;
+	calculate_mu(board);
+	float pre_score;
+	float num_B = count_mu();
+	if (player == B)
+		pre_score = num_B;
+	else
+		pre_score = bsize * bsize - num_B;
 	for (int i = 0; i < bsize * bsize; i++) {
-		float score = best_play_v1_helper(i);
+		float score = best_play_v1_helper(i, pre_score);
 		if (score > max_score) {
 			max_score = score;
 			buf_size = 1;
@@ -935,9 +974,256 @@ int best_play_v1() {
 	}
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////
+// Fields used for best_play_v2
+struct p {
+	int index;
+	float score;
+};
+
+int cmp(const void* a, const void* b) {
+	return ((p*)a)->score < ((p*)b)->score ? 1 : -1; // decreasing by score
+}
+char* test_board_v2;
+p* p_buf;
+int** removed_pieces;
+int eaten_record_v2;
+int hand_record_v2;
+int hand_v2;
+char player_v2;
+
+// This function validate move on test_board_v2
+// This function also stores the change to cooperate with best_play_v2_restore()
+// Return -1 if failed to validate the move (then no change on the board)
+int best_play_v2_validate(int index) {
+	if (test_board_v2[index] != 0) {
+		return -1;
+	}
+	// Write the new piece down temporarily
+	test_board_v2[index] = player_v2;
+	// Buffer store the recovery information. Notice removed_p[0] stores the length of removed pieces
+	int* removed_p = (int*)calloc(bsize * bsize + 5, sizeof(int));
+	// test right
+	if ((index + 1) % bsize != 0) {
+		if (test_board_v2[index] != test_board_v2[index + 1] && test_board_v2[index + 1] != 0) {
+			calculate_qi(index + 1, test_board_v2);
+			if (qi_buf_size == 0) {
+				if (index == eaten_record_v2 && piece_buf_size == 1) {
+					test_board_v2[index] = 0;
+					free(removed_p);
+					return -1;
+				}
+				if (piece_buf_size == 1) {
+					eaten_record_v2 = piece_index_buf[0];
+					hand_record_v2 = hand_v2 + 1;
+				}
+				piece_remove_buf(test_board_v2);
+				for (int i = 0; i < piece_buf_size; i++) {
+					removed_p[++removed_p[0]] = piece_index_buf[i];
+				}
+			}
+		}
+	}
+	// test left
+	if (index % bsize != 0) {
+		if (test_board_v2[index] != test_board_v2[index - 1] && test_board_v2[index - 1] != 0) {
+			calculate_qi(index - 1, test_board_v2);
+			if (qi_buf_size == 0) {
+				if (index == eaten_record_v2 && piece_buf_size == 1) {
+					test_board_v2[index] = 0;
+					free(removed_p);
+					return -1;
+				}
+				if (piece_buf_size == 1) {
+					eaten_record_v2 = piece_index_buf[0];
+					hand_record_v2 = hand_v2 + 1;
+				}
+				piece_remove_buf(test_board_v2);
+				for (int i = 0; i < piece_buf_size; i++) {
+					removed_p[++removed_p[0]] = piece_index_buf[i];
+				}
+			}
+		}
+	}
+	// test top
+	if (index >= bsize) {
+		if (test_board_v2[index] != test_board_v2[index - bsize] && test_board_v2[index - bsize] != 0) {
+			calculate_qi(index - bsize, test_board_v2);
+			if (qi_buf_size == 0) {
+				if (index == eaten_record_v2 && piece_buf_size == 1) {
+					test_board_v2[index] = 0;
+					free(removed_p);
+					return -1;
+				}
+				if (piece_buf_size == 1) {
+					eaten_record_v2 = piece_index_buf[0];
+					hand_record_v2 = hand_v2 + 1;
+				}
+				piece_remove_buf(test_board_v2);
+				for (int i = 0; i < piece_buf_size; i++) {
+					removed_p[++removed_p[0]] = piece_index_buf[i];
+				}
+			}
+		}
+	}
+	// test bottom
+	if (index < bsize * bsize - bsize) {
+		if (test_board_v2[index] != test_board_v2[index + bsize] && test_board_v2[index + bsize] != 0) {
+			calculate_qi(index + bsize, test_board_v2);
+			if (qi_buf_size == 0) {
+				if (index == eaten_record_v2 && piece_buf_size == 1) {
+					test_board_v2[index] = 0;
+					free(removed_p);
+					return -1;
+				}
+				if (piece_buf_size == 1) {
+					eaten_record_v2 = piece_index_buf[0];
+					hand_record_v2 = hand_v2 + 1;
+				}
+				piece_remove_buf(test_board_v2);
+				for (int i = 0; i < piece_buf_size; i++) {
+					removed_p[++removed_p[0]] = piece_index_buf[i];
+				}
+			}
+		}
+	}
+	// invalid suicide move
+	calculate_qi(index, test_board_v2);
+	if (qi_buf_size == 0 && removed_p[0] == 0) {
+		test_board_v2[index] = 0;
+		free(removed_p);
+		return -1;
+	}
+	// Store other information
+	removed_p[removed_p[0] + 1] = player_v2;
+	removed_p[removed_p[0] + 2] = hand_v2;
+	removed_p[removed_p[0] + 3] = eaten_record_v2;
+	removed_p[removed_p[0] + 4] = hand_record_v2;
+	if (player_v2 == B) {
+		player_v2 = W;
+	}
+	else {
+		player_v2 = B;
+	}
+	hand_v2++;
+	// erase the record next hand
+	if (hand_v2 == hand_record_v2 + 1) {
+		eaten_record_v2 = -1;
+		hand_record_v2 = 0;
+	}
+	int * removed_p_2 = (int*)realloc(removed_p, (removed_p[0] + 5) * sizeof(int));
+	if (removed_p_2 == NULL) {
+		printf("Memory Error in best_play_v2_validate()\n");
+		exit(-2);
+	}
+	if (removed_pieces[index] != NULL) {
+		printf("ERROR: overwrite record in best_play_v2_validate()\n");
+		exit(-3);
+	}
+	removed_pieces[index] = removed_p_2;
+	return 0;
+}
+
+// This function help restore the board (i.e. remove test_board_v2[index] and add back removed pieces)
+void best_play_v2_restore(int index) {
+	char me = test_board_v2[index];
+	char opponent;
+	test_board_v2[index] = 0;
+	if (me == B) {
+		opponent = W;
+	}
+	else {
+		opponent = B;
+	}
+	int* removed_p = removed_pieces[index];
+	int i;
+	for (i = 0; i < removed_p[0]; i++) { //moved_p[0] stores the length
+		int idx = removed_p[i + 1];
+		test_board_v2[idx] = opponent;
+	}
+	player_v2 = removed_p[i + 1];
+	hand_v2 = removed_p[i + 2];
+	eaten_record_v2 = removed_p[i + 3];
+	hand_record_v2 = removed_p[i + 4];
+	free(removed_p); 
+	removed_pieces[index] = NULL;
+}
+
+
+void best_play_v2_helper() {
+	calculate_mu(test_board_v2);
+	float pre_score;
+	float num_B = count_mu();
+	if (player == B)
+		pre_score = num_B;
+	else
+		pre_score = bsize * bsize - num_B; // Current mu of this player
+	
+	for (int i = 0; i < bsize * bsize; i++) {
+		// simulate the hand of this player
+		if (best_play_v2_validate(i) == -1) {
+			p_buf[i] = {i, -FLT_MAX};
+			continue;
+		}
+		//float average_post_score = 0;
+		//int count_valid = 0;
+		float min_score = FLT_MAX;
+		for (int j = 0; j < bsize * bsize; j++) {
+			// simulate the hand of the opponent
+			if (best_play_v2_validate(j) == -1) {
+				continue;
+			}
+			calculate_mu(test_board_v2);
+			float post_score;
+			num_B = count_mu();
+			if (player == B)
+				post_score = num_B;
+			else
+				post_score = bsize * bsize - num_B; // Current mu of this player again
+			//average_post_score = (average_post_score * count_valid + post_score) / (count_valid + 1);
+			//count_valid++; // calculate average post_score
+			if (post_score < min_score) {
+				min_score = post_score;
+			}
+			best_play_v2_restore(j);
+		}
+		best_play_v2_restore(i);
+		//p_buf[i] = {i, average_post_score - pre_score};
+		p_buf[i] = { i, min_score - pre_score };
+	}
+	qsort(p_buf, bsize * bsize, sizeof(p), cmp);
+}
 
 // Play the best hand
-// Second version
+// Second version: this verstion tests the current hand of this player and the next hand of the opponent
 int best_play_v2() {
-	return -1;
+	test_board_v2 = (char*)calloc(bsize * bsize, sizeof(char)); // test_board used to test all possibilities
+	p_buf = (p*)calloc(bsize * bsize, sizeof(p)); // Store all possibilities
+	removed_pieces = (int**)calloc(bsize * bsize, sizeof(int*)); // Store recovery information
+	if (test_board_v2 == NULL || p_buf == NULL || removed_pieces == NULL) {
+		printf("Memory Error in best_play_v2()\n");
+		exit(-2);
+	}
+	copy_board(board, test_board_v2);
+	eaten_record_v2 = eaten_record;
+	hand_record_v2 = hand_record;
+	hand_v2 = hand; 
+	player_v2 = player; // Copy and paste the state of current game
+	best_play_v2_helper();
+
+	free(test_board_v2);
+	p first = p_buf[0];
+	for (int i = 0; i < bsize * bsize; i++) {
+		//printf("(%d%c,%.1f) ", p_buf[i].index/bsize + 1,p_buf[i].index%bsize+65,p_buf[i].score);
+	}
+	free(p_buf);
+	free(removed_pieces);
+	// The first case happens at the end of the game
+	// The second case happens when this hand cause opponent go stop
+	if (first.score > -FLT_MAX && first.score < FLT_MAX - bsize * bsize) {
+		return first.index;
+	}
+	else {
+		return -1;
+	}
 }
