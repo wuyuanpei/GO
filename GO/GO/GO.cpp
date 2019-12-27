@@ -4,7 +4,7 @@
 
 #define B 1 // Two players
 #define W 2
-#define FLT_MAX 999
+#define FLT_MAX_T 999
 #define best_play_v2 best_play
 
 int bsize = 0; // board has size bsize*bsize
@@ -839,7 +839,7 @@ void do_best_play() {
 		return;
 	}
 	if (validate_move(index) == -1){
-		printf("ERROR: index returned by best_play() is invalid\n");
+		printf("ERROR: index [%d%c] returned by best_play() is invalid\n", index / bsize + 1, index % bsize + 65);
 		exit(-3);
 		return;
 	}
@@ -852,7 +852,7 @@ void do_best_play() {
 // If the score is -FLT_MAX, the index is not valid
 float best_play_v1_helper(int index, float pre_score) {
 	if (board[index] != 0)
-		return -FLT_MAX;
+		return -FLT_MAX_T;
 	char* test_board = (char*)calloc(bsize * bsize, sizeof(char));
 	if (test_board == NULL) {
 		printf("Memory Error in best_play_v1_helper()\n");
@@ -870,7 +870,7 @@ float best_play_v1_helper(int index, float pre_score) {
 				// test jie
 				if (index == eaten_record && piece_buf_size == 1) {
 					free(test_board);
-					return -FLT_MAX;
+					return -FLT_MAX_T;
 				}
 				piece_remove_buf(test_board);
 				need_remove = 1;
@@ -884,7 +884,7 @@ float best_play_v1_helper(int index, float pre_score) {
 			if (qi_buf_size == 0) {
 				if (index == eaten_record && piece_buf_size == 1) {
 					free(test_board);
-					return -FLT_MAX;
+					return -FLT_MAX_T;
 				}
 				piece_remove_buf(test_board);
 				need_remove = 1;
@@ -898,7 +898,7 @@ float best_play_v1_helper(int index, float pre_score) {
 			if (qi_buf_size == 0) {
 				if (index == eaten_record && piece_buf_size == 1) {
 					free(test_board);
-					return -FLT_MAX;
+					return -FLT_MAX_T;
 				}
 				piece_remove_buf(test_board);
 				need_remove = 1;
@@ -912,7 +912,7 @@ float best_play_v1_helper(int index, float pre_score) {
 			if (qi_buf_size == 0) {
 				if (index == eaten_record && piece_buf_size == 1) {
 					free(test_board);
-					return -FLT_MAX;
+					return -FLT_MAX_T;
 				}
 				piece_remove_buf(test_board);
 				need_remove = 1;
@@ -923,7 +923,7 @@ float best_play_v1_helper(int index, float pre_score) {
 	calculate_qi(index, test_board);
 	if (qi_buf_size == 0 && need_remove == 0) {
 		free(test_board);
-		return -FLT_MAX;
+		return -FLT_MAX_T;
 	}
 	calculate_mu(test_board);
 	free(test_board);
@@ -1003,6 +1003,11 @@ int best_play_v2_validate(int index) {
 	test_board_v2[index] = player_v2;
 	// Buffer store the recovery information. Notice removed_p[0] stores the length of removed pieces
 	int* removed_p = (int*)calloc(bsize * bsize + 5, sizeof(int));
+	// Store other information
+	removed_p[1] = player_v2;
+	removed_p[2] = hand_v2;
+	removed_p[3] = eaten_record_v2;
+	removed_p[4] = hand_record_v2;
 	// test right
 	if ((index + 1) % bsize != 0) {
 		if (test_board_v2[index] != test_board_v2[index + 1] && test_board_v2[index + 1] != 0) {
@@ -1019,7 +1024,7 @@ int best_play_v2_validate(int index) {
 				}
 				piece_remove_buf(test_board_v2);
 				for (int i = 0; i < piece_buf_size; i++) {
-					removed_p[++removed_p[0]] = piece_index_buf[i];
+					removed_p[++removed_p[0] + 4] = piece_index_buf[i];
 				}
 			}
 		}
@@ -1040,7 +1045,7 @@ int best_play_v2_validate(int index) {
 				}
 				piece_remove_buf(test_board_v2);
 				for (int i = 0; i < piece_buf_size; i++) {
-					removed_p[++removed_p[0]] = piece_index_buf[i];
+					removed_p[++removed_p[0] + 4] = piece_index_buf[i];
 				}
 			}
 		}
@@ -1061,7 +1066,7 @@ int best_play_v2_validate(int index) {
 				}
 				piece_remove_buf(test_board_v2);
 				for (int i = 0; i < piece_buf_size; i++) {
-					removed_p[++removed_p[0]] = piece_index_buf[i];
+					removed_p[++removed_p[0] + 4] = piece_index_buf[i];
 				}
 			}
 		}
@@ -1082,7 +1087,7 @@ int best_play_v2_validate(int index) {
 				}
 				piece_remove_buf(test_board_v2);
 				for (int i = 0; i < piece_buf_size; i++) {
-					removed_p[++removed_p[0]] = piece_index_buf[i];
+					removed_p[++removed_p[0] + 4] = piece_index_buf[i];
 				}
 			}
 		}
@@ -1094,11 +1099,7 @@ int best_play_v2_validate(int index) {
 		free(removed_p);
 		return -1;
 	}
-	// Store other information
-	removed_p[removed_p[0] + 1] = player_v2;
-	removed_p[removed_p[0] + 2] = hand_v2;
-	removed_p[removed_p[0] + 3] = eaten_record_v2;
-	removed_p[removed_p[0] + 4] = hand_record_v2;
+	
 	if (player_v2 == B) {
 		player_v2 = W;
 	}
@@ -1138,13 +1139,13 @@ void best_play_v2_restore(int index) {
 	int* removed_p = removed_pieces[index];
 	int i;
 	for (i = 0; i < removed_p[0]; i++) { //moved_p[0] stores the length
-		int idx = removed_p[i + 1];
+		int idx = removed_p[i + 5];
 		test_board_v2[idx] = opponent;
 	}
-	player_v2 = removed_p[i + 1];
-	hand_v2 = removed_p[i + 2];
-	eaten_record_v2 = removed_p[i + 3];
-	hand_record_v2 = removed_p[i + 4];
+	player_v2 = removed_p[1];
+	hand_v2 = removed_p[2];
+	eaten_record_v2 = removed_p[3];
+	hand_record_v2 = removed_p[4];
 	free(removed_p); 
 	removed_pieces[index] = NULL;
 }
@@ -1162,12 +1163,12 @@ void best_play_v2_helper() {
 	for (int i = 0; i < bsize * bsize; i++) {
 		// simulate the hand of this player
 		if (best_play_v2_validate(i) == -1) {
-			p_buf[i] = {i, -FLT_MAX};
+			p_buf[i] = {i, -FLT_MAX_T};
 			continue;
 		}
 		//float average_post_score = 0;
 		//int count_valid = 0;
-		float min_score = FLT_MAX;
+		float min_score = FLT_MAX_T;
 		for (int j = 0; j < bsize * bsize; j++) {
 			// simulate the hand of the opponent
 			if (best_play_v2_validate(j) == -1) {
@@ -1214,13 +1215,13 @@ int best_play_v2() {
 	free(test_board_v2);
 	p first = p_buf[0];
 	for (int i = 0; i < bsize * bsize; i++) {
-		//printf("(%d%c,%.1f) ", p_buf[i].index/bsize + 1,p_buf[i].index%bsize+65,p_buf[i].score);
+		printf("(%d%c,%.1f) ", p_buf[i].index/bsize + 1,p_buf[i].index%bsize+65,p_buf[i].score);
 	}
 	free(p_buf);
 	free(removed_pieces);
-	// The first case happens at the end of the game
+	// The first case happens at the end of the game (2 * bsize is the buffer size to let the game play)
 	// The second case happens when this hand cause opponent go stop
-	if (first.score > -FLT_MAX && first.score < FLT_MAX - bsize * bsize) {
+	if (first.score > -2 * bsize && first.score < FLT_MAX_T - bsize * bsize) {
 		return first.index;
 	}
 	else {
